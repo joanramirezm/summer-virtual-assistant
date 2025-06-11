@@ -12,7 +12,9 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        $schedule->call(function () {
+            InteractionHistory::where('created_at', '<', now()->subMonths(3))->delete();
+        })->daily();
     }
 
     /**
