@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('language')->default('es');
             $table->string('preferred_interface')->default('text'); // text or voice
             $table->text('learning_topics')->nullable(); // JSON con temas de interés
-            $table->text('tech_skill_level')->default('beginner');
+            $table->string('tech_skill_level')->default('beginner');
             $table->timestamps();
         });
     }

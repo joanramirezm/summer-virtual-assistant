@@ -1,6 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AdminController;
+use App\Http\Controllers\AssistantController;
+use App\Http\Controllers\PreferenceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -23,13 +26,15 @@ Route::middleware([
     'verified',
 ])->group(function () {
     Route::get('/dashboard', function () {
-        return view('dashboard');
+        return redirect()->route('assistant.index');
     })->name('dashboard');
 });
 
-
-Route::middleware(['auth'])->group(function () {
-    Route::get('/', [HomeController::class, 'index'])->name('home');
+Route::middleware(['auth'])->group(function () 
+{
+    Route::get('/', function () {
+        return redirect()->route('assistant.index');
+    })->name('home');
     
     // Rutas del asistente
     Route::prefix('assistant')->group(function () {
@@ -43,11 +48,4 @@ Route::middleware(['auth'])->group(function () {
     // Rutas de preferencias
     Route::get('/preferences', [PreferenceController::class, 'edit'])->name('preferences.edit');
     Route::put('/preferences', [PreferenceController::class, 'update'])->name('preferences.update');
-    
-    // Rutas de administración
-    Route::middleware(['can:admin'])->prefix('admin')->group(function () {
-        Route::get('/dashboard', [AdminController::class, 'dashboard'])->name('admin.dashboard');
-        Route::get('/users', [AdminController::class, 'users'])->name('admin.users');
-        Route::get('/interactions', [AdminController::class, 'interactions'])->name('admin.interactions');
-    });
 });
