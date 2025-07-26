@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-           Asistente Virtual Summer
+            Asistente Virtual Summer
         </h2>
     </x-slot>
 
@@ -18,7 +18,7 @@
 
                         <!-- Cuerpo -->
                         <div class="p-6">
-            
+
                             <!-- Pestañas -->
                             <div class="mb-6">
                                 <div class="border-b border-gray-200">
@@ -27,10 +27,6 @@
                                             class="mr-2 py-4 px-6 text-center border-b-2 font-medium text-sm border-indigo-500 text-indigo-600">
                                             Texto
                                         </a>
-                                        <a href="#voice" id="voice-tab" data-toggle="tab" role="tab"
-                                            class="mr-2 py-4 px-6 text-center border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                                            Voz
-                                        </a>
                                     </nav>
                                 </div>
 
@@ -38,7 +34,7 @@
                                 <div class="py-4">
                                     <!-- Pestaña Texto -->
                                     <div id="text" role="tabpanel" class="tab-pane active">
-                                
+
                                         <!-- Mensaje de respuesta -->
                                         @if (session('response'))
                                             <div style="padding: 20px"
@@ -50,16 +46,17 @@
 
 
                                         <script>
-                                            document.addEventListener('DOMContentLoaded', function () {
+                                            document.addEventListener('DOMContentLoaded', function() {
                                                 const text = @json(session('response'));
                                                 const el = document.getElementById('typing-text');
 
                                                 let i = 0;
+
                                                 function typeWriter() {
                                                     if (i < text.length) {
                                                         el.textContent += text.charAt(i);
                                                         i++;
-                                                        setTimeout(typeWriter, 30); 
+                                                        setTimeout(typeWriter, 30);
                                                     }
                                                 }
 
@@ -68,16 +65,142 @@
                                                 }
                                             });
                                         </script>
-                                        
+
                                         <form action="{{ route('assistant.text') }}" method="post" class="space-y-4">
                                             @csrf
-                                            
-                                            <textarea
-                                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"
-                                                rows="4" placeholder="Escribe tu mensaje aquí..." name="message"></textarea>
+                                            <div class="relative">
+                                                <textarea
+                                                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition duration-200"
+                                                    rows="4" placeholder="Escribe tu mensaje aquí o haz clic en el micrófono..." name="message"
+                                                    id="message-input"></textarea>
+                                                <button type="button" id="voice-btn"
+                                                    class="absolute right-3 bottom-3 p-2 rounded-full bg-gray-100 hover:bg-gray-200 transition">
+                                                    <svg id="voice-icon" xmlns="http://www.w3.org/2000/svg"
+                                                        class="h-6 w-6 text-indigo-600" fill="none"
+                                                        viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                                    </svg>
+                                                    <svg id="stop-icon" xmlns="http://www.w3.org/2000/svg"
+                                                        class="h-6 w-6 text-red-600 hidden" fill="none"
+                                                        viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                                            stroke-width="2"
+                                                            d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                                                    </svg>
+                                                </button>
+                                                <span id="recording-status"
+                                                    class="hidden absolute right-3 top-3 text-xs text-red-600 font-medium bg-white px-2 py-1 rounded">Grabando...
+                                                    habla ahora</span>
+                                                <span id="browser-warning"
+                                                    class="hidden absolute right-3 top-3 text-xs text-red-600 font-medium bg-white px-2 py-1 rounded">Funcionalidad
+                                                    solo disponible en Chrome/Edge</span>
+                                            </div>
+
+                                            <script>
+                                                document.addEventListener('DOMContentLoaded', function() {
+                                                const voiceBtn = document.getElementById('voice-btn');
+                                                const messageInput = document.getElementById('message-input');
+                                                const voiceIcon = document.getElementById('voice-icon');
+                                                const stopIcon = document.getElementById('stop-icon');
+                                                const recordingStatus = document.getElementById('recording-status');
+                                                const browserWarning = document.getElementById('browser-warning');
+
+                                                // Verificar compatibilidad del navegador
+                                                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                                                if (!SpeechRecognition) {
+                                                    browserWarning.classList.remove('hidden');
+                                                    voiceBtn.disabled = true;
+                                                    return;
+                                                }
+
+                                                const recognition = new SpeechRecognition();
+                                                recognition.continuous = true;
+                                                recognition.interimResults = true;
+                                                recognition.lang = 'es-ES';
+
+                                                let isRecording = false;
+                                                let finalTranscript = '';
+                                                let timeoutId;
+
+                                                recognition.onstart = function() {
+                                                    isRecording = true;
+                                                    voiceIcon.classList.add('hidden');
+                                                    stopIcon.classList.remove('hidden');
+                                                    recordingStatus.classList.remove('hidden');
+                                                    finalTranscript = messageInput.value; // Mantener el texto existente
+                                                };
+
+                                                recognition.onresult = function(event) {
+                                                    clearTimeout(timeoutId);
+                                                    let interimTranscript = '';
+                                                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                                                        const transcript = event.results[i][0].transcript;
+                                                        if (event.results[i].isFinal) {
+                                                            finalTranscript += transcript + ' ';
+                                                        } else {
+                                                            interimTranscript += transcript;
+                                                        }
+                                                    }
+                                                    messageInput.value = finalTranscript + interimTranscript;
+
+                                                    timeoutId = setTimeout(() => {
+                                                        if (isRecording) stopRecording();
+                                                    }, 3000); // Detener después de 3 segundos de inactividad
+                                                };
+
+                                            recognition.onerror = function(event) {
+                                                console.error('Error:', event.error);
+                                                stopRecording();
+
+                                                if (event.error === 'not-allowed') {
+                                                    alert('Por favor permite el acceso al micrófono en la configuración de tu navegador');
+                                                } else if (event.error === 'network') {
+                                                    alert('Error de conexión. Por favor, verifica tu red.');
+                                                }
+                                            };
+
+
+                                                recognition.onend = function() {
+                                                    console.log('Reconocimiento finalizado');
+                                                    if (isRecording) {
+                                                        recognition.start(); // Reiniciar si aún estamos grabando
+                                                    }
+                                                };
+
+                                                function startRecording() {
+                                                    try {
+                                                        recognition.start();
+                                                    } catch (e) {
+                                                        console.error(e);
+                                                    }
+                                                }
+
+                                                function stopRecording() {
+                                                    isRecording = false;
+                                                    recognition.stop();
+                                                    voiceIcon.classList.remove('hidden');
+                                                    stopIcon.classList.add('hidden');
+                                                    recordingStatus.classList.add('hidden');
+                                                    clearTimeout(timeoutId);
+                                                }
+
+                                                voiceBtn.addEventListener('click', function() {
+                                                    if (isRecording) {
+                                                        stopRecording();
+                                                    } else {
+                                                        startRecording();
+                                                    }
+                                                });
+                                            });
+
+                                            </script>
                                             <button
                                                 class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200">
-                                                Enviar 
+                                                Enviar
                                             </button>
                                         </form>
                                     </div>
@@ -165,4 +288,3 @@
         </div>
     </div>
 </x-app-layout>
-
