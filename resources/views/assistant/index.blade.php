@@ -12,7 +12,7 @@
                     <!-- Tarjeta principal -->
                     <div class="bg-white rounded-lg shadow-lg overflow-hidden">
                         <!-- Encabezado -->
-                        <div class="bg-orange-500 text-white px-6 py-4">
+                        <div class="bg-orange-400 text-white px-6 py-4">
     <h2 class="text-xl font-bold">Summer – Asistente Virtual</h2>
 </div>
 
@@ -31,7 +31,7 @@
                                         <!-- Mensaje de respuesta -->
                                        @if (session('response'))
     <div style="padding: 20"
-        class=" bg-orange-300 border-indigo-500 text-indigo-700 p-4 mb-6 rounded-lg ">
+        class=" bg-orange-200 border-indigo-500 text-indigo-700 p-4 mb-6 rounded-lg ">
         <p class="font-semibold">Repuesta:</p>
         <p class="mt-1" id="typing-text"></p>
 
@@ -307,35 +307,41 @@ document.addEventListener('DOMContentLoaded', function() {
     let shortRecognition; // Para detectar la palabra clave
     let fullRecognition;  // Para grabar mensaje completo
     let timeoutId;
+    const hotwords = ['summer', 'samer', 'sámmer', 'sámer', 'sameri']; // agrega las que creas posibles
+
 
     function startShortRecognition() {
-        shortRecognition = new SpeechRecognition();
-        shortRecognition.continuous = false;
-        shortRecognition.interimResults = true;
-        shortRecognition.lang = 'es-ES';
+    shortRecognition = new SpeechRecognition();
+    shortRecognition.continuous = true; // ahora escucha todo el tiempo
+    shortRecognition.interimResults = true;
+    shortRecognition.lang = 'es-ES';
 
-        shortRecognition.onresult = function(event) {
-            let transcript = '';
-            for (let i = event.resultIndex; i < event.results.length; i++) {
-                transcript += event.results[i][0].transcript;
-            }
+    shortRecognition.onresult = function(event) {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript.toLowerCase();
+        }
 
-            if (transcript.toLowerCase().includes('summer')) {
-                // Se dijo la palabra clave
-                startFullRecognition();
-            }
-        };
+        if (hotwords.some(word => transcript.includes(word))) {
+            startFullRecognition();
+        }
+    };
 
-        shortRecognition.onend = function() {
-            if (!isRecordingFull) shortRecognition.start();
-        };
+    shortRecognition.onend = function() {
+        if (!isRecordingFull) {
+            // Reiniciar solo si hubo un cierre inesperado
+            shortRecognition.start();
+        }
+    };
 
-        shortRecognition.onerror = function(event) {
-            console.error('Error hotword:', event.error);
-        };
+    shortRecognition.onerror = function(event) {
+        console.error('Error hotword:', event.error);
+        // Reiniciar si falla
+        if (!isRecordingFull) shortRecognition.start();
+    };
 
-        shortRecognition.start();
-    }
+    shortRecognition.start();
+}
 
     function startFullRecognition() {
         isRecordingFull = true;
@@ -412,7 +418,7 @@ voiceBtn.addEventListener('click', function() {
 
 
                                             <button
-    class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-6 rounded-lg transition duration-200 w-full sm">
+    class="bg-orange-400 hover:bg-orange-600 text-white font-medium py-2 px-6 rounded-lg transition duration-200 w-full sm">
     Enviar
 </button>
                                         </form>
