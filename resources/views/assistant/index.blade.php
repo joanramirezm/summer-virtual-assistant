@@ -36,35 +36,227 @@
                                     <div id="text" role="tabpanel" class="tab-pane active">
 
                                         <!-- Mensaje de respuesta -->
-                                        @if (session('response'))
-                                            <div style="padding: 20px"
-                                                class=" bg-indigo-50 border-l-4 border-indigo-500 text-indigo-700 p-4 mb-6 rounded-r">
-                                                <p class="font-semibold">Repuesta:</p>
-                                                <p class="mt-1" id="typing-text"></p>
-                                            </div>
-                                        @endif
+                                       @if (session('response'))
+    <div style="padding: 20px"
+        class=" bg-indigo-50 border-l-4 border-indigo-500 text-indigo-700 p-4 mb-6 rounded-r">
+        <p class="font-semibold">Repuesta:</p>
+        <p class="mt-1" id="typing-text"></p>
+
+        <!-- Controles TTS -->
+        <div id="tts-controls" class="mt-4 flex flex-wrap items-center gap-3">
+            <button type="button" id="tts-play"
+                class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-1.5 px-3 rounded">
+                🔊 Escuchar
+            </button>
+            <button type="button" id="tts-stop"
+                class="bg-gray-200 hover:bg-gray-300 text-gray-900 text-sm font-medium py-1.5 px-3 rounded">
+                ⏹️ Detener
+            </button>
+
+            <label class="text-sm text-gray-700 ml-2">
+                Velocidad
+                <input id="tts-rate" type="range" min="0.6" max="1.4" step="0.1" value="1"
+                       class="align-middle ml-1">
+                <span id="tts-rate-val" class="ml-1 text-xs align-middle">1.0x</span>
+            </label>
+
+            <label class="text-sm text-gray-700 ml-2">
+                Voz
+                <select id="tts-voice" class="ml-1 border border-gray-300 rounded px-2 py-1 text-sm">
+                    <option value="">(automática)</option>
+                </select>
+            </label>
+
+            <label class="text-sm text-gray-700 ml-2">
+                <input id="tts-autoplay" type="checkbox" class="mr-1" checked>
+                Leer automáticamente
+            </label>
+
+            <span id="tts-unsupported" class="hidden text-xs text-red-600 ml-2">
+                Tu navegador no soporta síntesis de voz.
+            </span>
+        </div>
+    </div>
+@endif
 
 
                                         <script>
-                                            document.addEventListener('DOMContentLoaded', function() {
-                                                const text = @json(session('response'));
-                                                const el = document.getElementById('typing-text');
+document.addEventListener('DOMContentLoaded', function () {
+    // ====== Texto de la respuesta (de sesión) + efecto typewriter ======
+    const text = @json(session('response'));
+    const el = document.getElementById('typing-text');
 
-                                                let i = 0;
+    // ====== TTS: helpers y estado ======
+    const hasTTS = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+    const playBtn = document.getElementById('tts-play');
+    const stopBtn = document.getElementById('tts-stop');
+    const voiceSelect = document.getElementById('tts-voice');
+    const rateInput = document.getElementById('tts-rate');
+    const rateVal = document.getElementById('tts-rate-val');
+    const autoplayChk = document.getElementById('tts-autoplay');
+    const unsupported = document.getElementById('tts-unsupported');
 
-                                                function typeWriter() {
-                                                    if (i < text.length) {
-                                                        el.textContent += text.charAt(i);
-                                                        i++;
-                                                        setTimeout(typeWriter, 30);
-                                                    }
-                                                }
+    let currentUtterance = null;
+    let typingDone = false;
+    let i = 0;
 
-                                                if (text) {
-                                                    typeWriter();
-                                                }
-                                            });
-                                        </script>
+    function typeWriter(doneCb) {
+        if (!text || !el) return;
+        if (i < text.length) {
+            el.textContent += text.charAt(i);
+            i++;
+            setTimeout(() => typeWriter(doneCb), 30);
+        } else {
+            typingDone = true;
+            if (typeof doneCb === 'function') doneCb();
+        }
+    }
+
+    // ====== TTS core ======
+    function cancelTTS() {
+        try { window.speechSynthesis.cancel(); } catch (_) {}
+        currentUtterance = null;
+    }
+
+    function speakTTS(message) {
+        if (!hasTTS || !message) return;
+        cancelTTS();
+
+        const utt = new SpeechSynthesisUtterance(message);
+        // Preferimos voces en español si existen
+        const selectedVoiceName = voiceSelect?.value || '';
+        const voices = window.speechSynthesis.getVoices();
+        let voice = null;
+
+        if (selectedVoiceName) {
+            voice = voices.find(v => v.name === selectedVoiceName) || null;
+        }
+        if (!voice) {
+            voice = voices.find(v => v.lang?.toLowerCase().startsWith('es')) ||
+                    voices.find(v => v.lang?.toLowerCase().startsWith('en')) ||
+                    voices[0] || null;
+        }
+
+        if (voice) {
+            utt.voice = voice;
+            // Alinear lang con la voz
+            if (voice.lang) utt.lang = voice.lang;
+        } else {
+            // fallback
+            utt.lang = 'es-ES';
+        }
+
+        // Velocidad
+        const rate = parseFloat(rateInput?.value || '1') || 1;
+        utt.rate = Math.max(0.5, Math.min(2, rate));
+
+        currentUtterance = utt;
+        window.speechSynthesis.speak(utt);
+    }
+
+    function populateVoices() {
+        if (!hasTTS || !voiceSelect) return;
+        const voices = window.speechSynthesis.getVoices();
+        // Guardar selección actual (si existía)
+        const prev = localStorage.getItem('tts.voice') || '';
+
+        // Limpiar y cargar
+        voiceSelect.innerHTML = '<option value="">(automática)</option>';
+        // Priorizamos español arriba
+        const sorted = voices.slice().sort((a, b) => {
+            const aEs = a.lang.toLowerCase().startsWith('es') ? -1 : 0;
+            const bEs = b.lang.toLowerCase().startsWith('es') ? -1 : 0;
+            if (aEs !== bEs) return aEs - bEs;
+            return a.name.localeCompare(b.name);
+        });
+
+        for (const v of sorted) {
+            const opt = document.createElement('option');
+            opt.value = v.name;
+            opt.textContent = `${v.name} — ${v.lang}`;
+            voiceSelect.appendChild(opt);
+        }
+        if (prev) {
+            const exists = Array.from(voiceSelect.options).some(o => o.value === prev);
+            if (exists) voiceSelect.value = prev;
+        }
+    }
+
+    // ====== Bindings UI ======
+    if (!hasTTS) {
+        if (unsupported) unsupported.classList.remove('hidden');
+        if (playBtn) playBtn.disabled = true;
+        if (stopBtn) stopBtn.disabled = true;
+        if (voiceSelect) voiceSelect.disabled = true;
+        if (rateInput) rateInput.disabled = true;
+    } else {
+        populateVoices();
+        window.speechSynthesis.onvoiceschanged = populateVoices;
+
+        // Preferencias locales
+        const savedRate = localStorage.getItem('tts.rate');
+        const savedAuto = localStorage.getItem('tts.autoplay');
+
+        if (rateInput && savedRate) {
+            rateInput.value = savedRate;
+            rateVal.textContent = `${parseFloat(savedRate).toFixed(1)}x`;
+        }
+        if (autoplayChk && savedAuto !== null) {
+            autoplayChk.checked = savedAuto === '1';
+        }
+
+        voiceSelect?.addEventListener('change', () => {
+            localStorage.setItem('tts.voice', voiceSelect.value || '');
+        });
+        rateInput?.addEventListener('input', () => {
+            rateVal.textContent = `${parseFloat(rateInput.value).toFixed(1)}x`;
+            localStorage.setItem('tts.rate', rateInput.value);
+        });
+        autoplayChk?.addEventListener('change', () => {
+            localStorage.setItem('tts.autoplay', autoplayChk.checked ? '1' : '0');
+        });
+
+        playBtn?.addEventListener('click', () => {
+            const message = el?.textContent?.trim() || text || '';
+            if (!message) return;
+            // Si está en pausa, reanudar; si no, leer desde cero
+            if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            } else {
+                speakTTS(message);
+            }
+        });
+
+        stopBtn?.addEventListener('click', cancelTTS);
+
+        // Evitar que quede hablando si salimos
+        window.addEventListener('beforeunload', cancelTTS);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) cancelTTS();
+        });
+    }
+
+    
+
+    // Inicia: escribe y luego (opcional) lee
+if (text && el) {
+    // 1️⃣ Decir "Procesando" mientras se escribe
+    if (hasTTS && autoplayChk && autoplayChk.checked) {
+        speakTTS("Procesando...");
+    }
+
+    // 2️⃣ Iniciar efecto typewriter
+    typeWriter(() => {
+        // 3️⃣ Cuando termine de escribir, leer el texto real
+        if (hasTTS && autoplayChk && autoplayChk.checked) {
+            speakTTS(text);
+        }
+    });
+}
+
+});
+</script>
+
 
                                         <form action="{{ route('assistant.text') }}" method="post" class="space-y-4">
                                             @csrf
@@ -101,103 +293,129 @@
                                             </div>
 
                                             <script>
-                                                document.addEventListener('DOMContentLoaded', function() {
-                                                const voiceBtn = document.getElementById('voice-btn');
-                                                const messageInput = document.getElementById('message-input');
-                                                const voiceIcon = document.getElementById('voice-icon');
-                                                const stopIcon = document.getElementById('stop-icon');
-                                                const recordingStatus = document.getElementById('recording-status');
-                                                const browserWarning = document.getElementById('browser-warning');
+document.addEventListener('DOMContentLoaded', function() {
+    const voiceBtn = document.getElementById('voice-btn');
+    const messageInput = document.getElementById('message-input');
+    const voiceIcon = document.getElementById('voice-icon');
+    const stopIcon = document.getElementById('stop-icon');
+    const recordingStatus = document.getElementById('recording-status');
+    const browserWarning = document.getElementById('browser-warning');
 
-                                                // Verificar compatibilidad del navegador
-                                                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                                                if (!SpeechRecognition) {
-                                                    browserWarning.classList.remove('hidden');
-                                                    voiceBtn.disabled = true;
-                                                    return;
-                                                }
+    // Verificar compatibilidad
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        browserWarning.classList.remove('hidden');
+        voiceBtn.disabled = true;
+        return;
+    }
 
-                                                const recognition = new SpeechRecognition();
-                                                recognition.continuous = true;
-                                                recognition.interimResults = true;
-                                                recognition.lang = 'es-ES';
+    let isRecordingFull = false;
+    let finalTranscript = '';
+    let shortRecognition; // Para detectar la palabra clave
+    let fullRecognition;  // Para grabar mensaje completo
+    let timeoutId;
 
-                                                let isRecording = false;
-                                                let finalTranscript = '';
-                                                let timeoutId;
+    function startShortRecognition() {
+        shortRecognition = new SpeechRecognition();
+        shortRecognition.continuous = false;
+        shortRecognition.interimResults = true;
+        shortRecognition.lang = 'es-ES';
 
-                                                recognition.onstart = function() {
-                                                    isRecording = true;
-                                                    voiceIcon.classList.add('hidden');
-                                                    stopIcon.classList.remove('hidden');
-                                                    recordingStatus.classList.remove('hidden');
-                                                    finalTranscript = messageInput.value; // Mantener el texto existente
-                                                };
+        shortRecognition.onresult = function(event) {
+            let transcript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                transcript += event.results[i][0].transcript;
+            }
 
-                                                recognition.onresult = function(event) {
-                                                    clearTimeout(timeoutId);
-                                                    let interimTranscript = '';
-                                                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                                                        const transcript = event.results[i][0].transcript;
-                                                        if (event.results[i].isFinal) {
-                                                            finalTranscript += transcript + ' ';
-                                                        } else {
-                                                            interimTranscript += transcript;
-                                                        }
-                                                    }
-                                                    messageInput.value = finalTranscript + interimTranscript;
+            if (transcript.toLowerCase().includes('summer')) {
+                // Se dijo la palabra clave
+                startFullRecognition();
+            }
+        };
 
-                                                    timeoutId = setTimeout(() => {
-                                                        if (isRecording) stopRecording();
-                                                    }, 3000); // Detener después de 3 segundos de inactividad
-                                                };
+        shortRecognition.onend = function() {
+            if (!isRecordingFull) shortRecognition.start();
+        };
 
-                                            recognition.onerror = function(event) {
-                                                console.error('Error:', event.error);
-                                                stopRecording();
+        shortRecognition.onerror = function(event) {
+            console.error('Error hotword:', event.error);
+        };
 
-                                                if (event.error === 'not-allowed') {
-                                                    alert('Por favor permite el acceso al micrófono en la configuración de tu navegador');
-                                                } else if (event.error === 'network') {
-                                                    alert('Error de conexión. Por favor, verifica tu red.');
-                                                }
-                                            };
+        shortRecognition.start();
+    }
+
+    function startFullRecognition() {
+        isRecordingFull = true;
+        finalTranscript = '';
+        voiceIcon.classList.add('hidden');
+        stopIcon.classList.remove('hidden');
+        recordingStatus.classList.remove('hidden');
+        if (shortRecognition) shortRecognition.stop();
+
+        fullRecognition = new SpeechRecognition();
+        fullRecognition.continuous = true;
+        fullRecognition.interimResults = true;
+        fullRecognition.lang = 'es-ES';
+
+        fullRecognition.onresult = function(event) {
+            clearTimeout(timeoutId);
+            let interimTranscript = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' ';
+                } else {
+                    interimTranscript += transcript;
+                }
+            }
+            messageInput.value = finalTranscript + interimTranscript;
+
+            // Detener tras 2s de silencio
+            timeoutId = setTimeout(stopFullRecognition, 2000);
+        };
+
+        fullRecognition.onerror = function(event) {
+            console.error('Error full recording:', event.error);
+            stopFullRecognition();
+        };
+
+        fullRecognition.start();
+    }
+
+    function stopFullRecognition() {
+    isRecordingFull = false;
+    if (fullRecognition) fullRecognition.stop();
+    voiceIcon.classList.remove('hidden');
+    stopIcon.classList.add('hidden');
+    recordingStatus.classList.add('hidden');
+
+    // Reiniciar detección de hotword
+    startShortRecognition();
+
+    // --- Enviar formulario automáticamente después de 1 segundo ---
+    setTimeout(() => {
+        const form = document.querySelector('form[action="{{ route('assistant.text') }}"]');
+        if (form && finalTranscript.trim().length > 0) {
+            form.submit();
+        }
+    }, 1000);
+}
+
+    // Botón para grabar manual (opcional)
+    voiceBtn.addEventListener('click', function() {
+        if (isRecordingFull) {
+            stopFullRecognition();
+        } else {
+            alert('Di "Summer" para empezar a grabar tu mensaje.');
+        }
+    });
+
+    // Iniciar detección de palabra clave
+    startShortRecognition();
+});
+</script>
 
 
-                                                recognition.onend = function() {
-                                                    console.log('Reconocimiento finalizado');
-                                                    if (isRecording) {
-                                                        recognition.start(); // Reiniciar si aún estamos grabando
-                                                    }
-                                                };
-
-                                                function startRecording() {
-                                                    try {
-                                                        recognition.start();
-                                                    } catch (e) {
-                                                        console.error(e);
-                                                    }
-                                                }
-
-                                                function stopRecording() {
-                                                    isRecording = false;
-                                                    recognition.stop();
-                                                    voiceIcon.classList.remove('hidden');
-                                                    stopIcon.classList.add('hidden');
-                                                    recordingStatus.classList.add('hidden');
-                                                    clearTimeout(timeoutId);
-                                                }
-
-                                                voiceBtn.addEventListener('click', function() {
-                                                    if (isRecording) {
-                                                        stopRecording();
-                                                    } else {
-                                                        startRecording();
-                                                    }
-                                                });
-                                            });
-
-                                            </script>
                                             <button
                                                 class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200">
                                                 Enviar

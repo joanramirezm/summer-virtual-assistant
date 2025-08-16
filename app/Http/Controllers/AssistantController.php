@@ -21,7 +21,7 @@ class AssistantController extends Controller
     {
         $histories = auth()->user()->interactionHistory()->latest()->take(10)->get();
         $topics = $this->assistantService->getLearningTopics();
-        
+
         return view('assistant.index', compact('histories', 'topics'));
     }
 
@@ -65,9 +65,14 @@ class AssistantController extends Controller
         $data = [
             'model' => 'gpt-4', // o 'gpt-3.5-turbo'
             'messages' => [
+
+
+
                 [
                     'role' => 'system',
-                    'content' => 'Eres un asistente útil.'
+                    'content' => "Eres Summer, un asistente virtual diseñado principalmente para interactuar por voz. 
+Tus respuestas deben ser concisas, naturales y adecuadas para una conversación hablada. 
+Siempre adapta tu estilo a la comunicación verbal y cercana."
                 ],
                 [
                     'role' => 'user',
@@ -114,7 +119,7 @@ class AssistantController extends Controller
 
         $audioPath = $request->file('audio')->store('voice_input');
         $transcript = $this->assistantService->getVoiceService()->speechToText($audioPath);
-        
+
         $response = $this->assistantService->handleRequest(
             auth()->user(),
             $transcript,
