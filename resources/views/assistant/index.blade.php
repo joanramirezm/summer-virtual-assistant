@@ -12,9 +12,10 @@
                     <!-- Tarjeta principal -->
                     <div class="bg-white rounded-lg shadow-lg overflow-hidden">
                         <!-- Encabezado -->
-                        <div class="bg-indigo-600 text-white px-6 py-4">
-                            <h2 class="text-xl font-bold">Asistente Virtual</h2>
-                        </div>
+                        <div class="bg-orange-500 text-white px-6 py-4">
+    <h2 class="text-xl font-bold">Summer – Asistente Virtual</h2>
+</div>
+
 
                         <!-- Cuerpo -->
                         <div class="p-6">
@@ -30,7 +31,7 @@
                                         <!-- Mensaje de respuesta -->
                                        @if (session('response'))
     <div style="padding: 20"
-        class=" bg-indigo-50 border-indigo-500 text-indigo-700 p-4 mb-6 rounded-r">
+        class=" bg-orange-300 border-indigo-500 text-indigo-700 p-4 mb-6 rounded-lg ">
         <p class="font-semibold">Repuesta:</p>
         <p class="mt-1" id="typing-text"></p>
 
@@ -411,9 +412,9 @@ voiceBtn.addEventListener('click', function() {
 
 
                                             <button
-                                                class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200">
-                                                Enviar
-                                            </button>
+    class="bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-6 rounded-lg transition duration-200 w-full sm">
+    Enviar
+</button>
                                         </form>
                                     </div>
 

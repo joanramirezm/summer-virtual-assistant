@@ -58,7 +58,7 @@ class AssistantController extends Controller
 
     private function consultarOpenAI($mensajeUsuario)
     {
-        $apiKey = '';
+        $apiKey = env('OPENAI_API_KEY');
 
         $url = 'https://api.openai.com/v1/chat/completions';
 
